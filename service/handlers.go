@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/rancher/api-filter-proxy/model"
+	"github.com/rancher/rancher-domain-validaiton-service/model/"
 )
 
 //RequestData is for the JSON output
@@ -50,14 +50,14 @@ func ValidateDomian(w http.ResponseWriter, r *http.Request) {
 
 //ReturnHTTPError handles sending out CatalogError response
 func ReturnHTTPError(w http.ResponseWriter, r *http.Request, httpStatus int, errorMessage string) {
-	svcError := model.ProxyError{
+	svcError := model.DomainValidationErr{
 		Status:  strconv.Itoa(httpStatus),
 		Message: errorMessage,
 	}
 	writeError(w, svcError)
 }
 
-func writeError(w http.ResponseWriter, svcError model.ProxyError) {
+func writeError(w http.ResponseWriter, svcError model.DomainValidationErr) {
 	status, err := strconv.Atoi(svcError.Status)
 	if err != nil {
 		log.Errorf("Error writing error response %v", err)

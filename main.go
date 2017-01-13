@@ -7,6 +7,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/rancher/api-filter-proxy/service"
 	"github.com/rancher/rancher-auth-filter-service/manager"
+
 	"github.com/urfave/cli"
 )
 
