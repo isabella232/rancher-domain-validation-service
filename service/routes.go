@@ -6,13 +6,13 @@ import "github.com/gorilla/mux"
 func NewRouter() *mux.Router {
 	router := mux.NewRouter()
 	//list domains
-	router.HandleFunc("/v1-domains/domains/", GetDomains).Methods("GET")
+	router.HandleFunc("/v1-domains/domains", GetDomains).Methods("GET")
 	//get domain by id
 	router.HandleFunc("/v1-domains/domains/{id}", GetDomains).Methods("GET")
 	//get domianby id?="XX"
 	router.HandleFunc("/v1-domains/domain", GetDomains).Methods("GET")
 	//add new domain
-	router.HandleFunc("/v1-domains/domain", AddDomain).Methods("POST")
+	router.HandleFunc("/v1-domains/domain", CreateDomain).Methods("POST")
 	//delete domain
 	router.HandleFunc("/v1-domains/domain", DeleteDomain).Methods("DELETE")
 	//domain filter action?

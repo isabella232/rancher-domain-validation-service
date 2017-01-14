@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/rancher/api-filter-proxy/service"
-	"github.com/rancher/rancher-auth-filter-service/manager"
-
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/rancher/rancher-domain-validaiton-service/manager"
+	"github.com/rancher/rancher-domain-validaiton-service/service"
 	"github.com/urfave/cli"
 )
 
@@ -38,9 +38,6 @@ func main() {
 
 	app.Action = func(c *cli.Context) error {
 
-		manager.URL = c.String("rancherUrl")
-		manager.Port = c.String("localport")
-
 		logrus.Infof("Starting token validation service")
 		logrus.Infof("Rancher server URL:" + manager.URL + ". The validation filter server running on local port:" + manager.Port)
 		//create mux router
@@ -48,6 +45,7 @@ func main() {
 		http.Handle("/", router)
 		serverString := ":" + manager.Port
 		//start local server
+		manager.CreateDatabase()
 		logrus.Fatal(http.ListenAndServe(serverString, nil))
 		return nil
 	}
