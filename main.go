@@ -45,7 +45,7 @@ func main() {
 		http.Handle("/", router)
 		serverString := ":" + manager.Port
 		//start local server
-		manager.CreateDatabase()
+		// manager.CreateDatabase()
 		logrus.Fatal(http.ListenAndServe(serverString, nil))
 		return nil
 	}

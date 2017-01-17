@@ -13,9 +13,12 @@ func NewRouter() *mux.Router {
 	router.HandleFunc("/v1-domains/domain", GetDomains).Methods("GET")
 	//add new domain
 	router.HandleFunc("/v1-domains/domain", CreateDomain).Methods("POST")
+	//validate domain
+	router.HandleFunc("/v1-domains/domain/{id}", ActivateDomain).Methods("POST")
 	//delete domain
-	router.HandleFunc("/v1-domains/domain", DeleteDomain).Methods("DELETE")
-	//domain filter action?
-	router.HandleFunc("/v1-domains/validate", DeleteDomain).Methods("POST")
+	router.HandleFunc("/v1-domains/domain/{id}", DeleteDomain).Methods("DELETE")
+	//domain filter id=envid
+	router.HandleFunc("/v1-domains/filter/projects/{id}/loadbalancerservice", ValidateDomian).Methods("POST")
+
 	return router
 }

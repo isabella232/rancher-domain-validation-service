@@ -30,7 +30,7 @@ func CreateDatabase() {
 	if err != nil {
 		log.Errorf("Cannot create database: %v", err)
 	}
-	_, err = db.Query(fmt.Sprintf("CREATE TABLE `%s`.`%s`  (  `id` INT NOT NULL AUTO_INCREMENT,  `domainid` VARCHAR(45) NULL , `accountid` VARCHAR(45) NULL,  `projectid` VARCHAR(45) NULL,  `state` VARCHAR(45) NULL,  `hashvalue` VARCHAR(45) NULL,  `domain_name` VARCHAR(45) NULL,  PRIMARY KEY (`id`),  UNIQUE INDEX `domainid_UNIQUE` (`domainid` ASC));", DatabaseName, DomainTable))
+	_, err = db.Query(fmt.Sprintf("CREATE TABLE `%s`.`%s`  (  `id` INT NOT NULL AUTO_INCREMENT, `accountid` VARCHAR(45) NULL,  `projectid` VARCHAR(45) NULL,  `state` VARCHAR(45) NULL,  `hashvalue` VARCHAR(45) NULL,  `domain_name` VARCHAR(45) NULL,  PRIMARY KEY (`id`));", DatabaseName, DomainTable))
 	if err != nil {
 		log.Errorf("Cannot create table: %v", err)
 	}
