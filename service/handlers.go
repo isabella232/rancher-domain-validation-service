@@ -325,7 +325,7 @@ func ValidateDomian(w http.ResponseWriter, r *http.Request) {
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error connecting to database: %v", err))
 		return
 	}
-	query, err := db.Query(fmt.Sprintf("SELECT domain_name FROM %s.%s WHERE accountid='%s' AND state='active' AND projectid='%s';", manager.DatabaseName, manager.DomainTable, accountID, ProjectID))
+	query, err := db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE accountid='%s' AND state = 'active' AND projectid = '%s' ;", manager.DatabaseName, manager.DomainTable, accountID, ProjectID))
 	fmt.Printf("SELECT domain_name FROM %s.%s WHERE accountid='%s' AND state='active' AND projectid='%s';", manager.DatabaseName, manager.DomainTable, accountID, ProjectID)
 
 	if err != nil {
@@ -335,16 +335,16 @@ func ValidateDomian(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// fmt.Println(jsonInput.LbConfig.PortRules[0].Hostname)
-	if len(jsonInput.LbConfig.PortRules) >= 1 {
 
-	}
 	queryResult, err := praseQueryResult(query)
 	validDomainlist := mapset.NewSet()
+	fmt.Print(queryResult)
+	//there are some problem we cannot get the database
 	fmt.Println("extract domain name from db")
-	for _, v := range queryResult {
-		if v.DomainID != "" {
-			fmt.Println(v.DomainID)
-			validDomainlist.Add(v.DomainID)
+	for k, _ := range queryResult {
+		if queryResult[k].DomianName != "" {
+			fmt.Println(queryResult[k].DomianName)
+			validDomainlist.Add(queryResult[k].DomianName)
 		}
 	}
 
