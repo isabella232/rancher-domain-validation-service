@@ -19,10 +19,22 @@ var DatabaseName = "domian4"
 //DomainTable for domian
 var DomainTable = "domain_list"
 
+//DatabaseURL is the sqlserver username
+var DatabaseURL = "54.255.182.226:3306"
+
+//DatabaseUsername is the sqlserver username
+var DatabaseUsername = "newuser"
+
+//DatbasePWD is the sqlserver password
+var DatbasePWD = "mynewpassword"
+
+//ConnectionString for connecting the sql server
+var ConnectionString = "newuser:mynewpassword@tcp(54.255.182.226:3306)/?charset=utf8"
+
 //CreateDatabase is for CreateDatabase
 func CreateDatabase() {
 
-	db, err := sql.Open("mysql", "newuser:mynewpassword@tcp(54.255.182.226:3306)/?charset=utf8") //第一个参数为驱动名
+	db, err := sql.Open("mysql", ConnectionString) //第一个参数为驱动名
 	checkErr(err)
 
 	//create domain Database

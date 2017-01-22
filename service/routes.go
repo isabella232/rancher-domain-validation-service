@@ -5,8 +5,12 @@ import "github.com/gorilla/mux"
 //NewRouter creates and configures a mux router
 func NewRouter() *mux.Router {
 	router := mux.NewRouter()
+	// //list domains
+	// router.HandleFunc("/v1-domains/domains", GetDomains).Methods("GET")
 	//list domains
-	router.HandleFunc("/v1-domains/domains", GetDomains).Methods("GET")
+	router.HandleFunc("/v1-domains/domains/{id}", GetDomains).Methods("GET")
+	//list domains
+	router.HandleFunc("/v1-domains/domains/", GetDomains).Methods("GET")
 	//get domain by id
 	router.HandleFunc("/v1-domains/domains/{id}", GetDomains).Methods("GET")
 	//get domianby id?="XX"

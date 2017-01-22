@@ -42,6 +42,7 @@ type MessageData struct {
 type DomainRequest struct {
 	DomanName string `json:"domainName,omitempty"`
 	ProjectID string `json:"projectid,omitempty"`
+	AccountID string `json:"X-API-Account-Id,omitempty"`
 }
 
 //LbPost is for error/success the JSON output
@@ -51,48 +52,73 @@ type LbPost struct {
 
 //LbConfigData is the data inside LbConfig
 type LbConfigData struct {
-	// CertificateIds string         `json:"certificateIds,omitempty"`
-	// Config         string         `json:"config,omitempty"`
 	PortRules []PortRuleData `json:"portRules,omitempty"`
-	// StickinessPolicy string         `json:"stickinessPolicy,omitempty"`
 }
 
 //PortRuleData is the data inside PortRules
 type PortRuleData struct {
 	Hostname string `json:"hostname,omitempty"`
-	// Priority   string `json:"priority,omitempty"`
-	// Protocol   string `json:"protocol,omitempty"`
-	// SourcePort string `json:"sourcePort,omitempty"`
-	// TargetPort string `json:"targetPort,omitempty"`
 }
 
 //DomainList is for listing out the domains
 type DomainList struct {
-	DomainID   string `json:"domainId,omitempty"`
-	AccountID  string `json:"accountId,omitempty"`
-	ProjectID  string `json:"projectId,omitempty"`
-	DomianName string `json:"domainName,omitempty"`
-	State      string `json:"state,omitempty"`
-	Hashvalue  string `json:"hashvalue,omitempty"`
+	DomainID    string `json:"domainId,omitempty"`
+	AccountID   string `json:"accountId,omitempty"`
+	ProjectID   string `json:"projectId,omitempty"`
+	DomianName  string `json:"domainName,omitempty"`
+	State       string `json:"state,omitempty"`
+	Hashvalue   string `json:"hashvalue,omitempty"`
+	ContainerID string `json:"containerID,omitempty"`
 }
 
 //GetDomains return the list of domain
 func GetDomains(w http.ResponseWriter, r *http.Request) {
-	accountID, err := getAccountID(r)
-	if err != nil {
-		log.Errorf("Error get the account ID, please check the rancher server URL: %v", err)
-		ReturnHTTPError(w, r, "InternalServerError", http.StatusInternalServerError, fmt.Sprintf("Error get the account ID, please check the rancher server URL: %v", err))
+
+	ProjectID := r.Header.Get("X-API-ProjectID-Id")
+	if ProjectID == "" {
+		log.Errorf("Error reading request Body , err: X-API-ProjectID-Id")
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error reading request Body , err: X-API-ProjectID-Id"))
 		return
 	}
 
-	db, err := sql.Open("mysql", "newuser:mynewpassword@tcp(54.255.182.226:3306)/?charset=utf8")
+	vars := mux.Vars(r)
+	containerID := vars["id"]
+
+	db, err := sql.Open("mysql", manager.ConnectionString)
 	if err != nil {
 		log.Errorf("Error connecting to database: %v", err)
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error connecting to database: %v", err))
 		return
 	}
-	query, err := db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE accountid='%s';", manager.DatabaseName, manager.DomainTable, accountID))
-	fmt.Printf(fmt.Sprintf("SELECT * FROM %s.%s WHERE accountid='%s';", manager.DatabaseName, manager.DomainTable, accountID))
+
+	var query *sql.Rows
+	_, isadmin, err := getAccountID(r)
+	if err != nil {
+		log.Errorf("Error writing error response %v", err)
+		ReturnHTTPError(w, r, "InternalServerError", http.StatusInternalServerError, fmt.Sprintf("Error marshal the result to jsonstring: %v", err))
+		return
+	}
+	fmt.Println(isadmin)
+
+	if isadmin {
+		query, err = db.Query(fmt.Sprintf("SELECT * FROM %s.%s ;", manager.DatabaseName, manager.DomainTable))
+	} else {
+		if containerID == "" {
+			query, err = db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE projectid='%s';", manager.DatabaseName, manager.DomainTable, ProjectID))
+			fmt.Printf(fmt.Sprintf("SELECT * FROM %s.%s WHERE projectid='%s';", manager.DatabaseName, manager.DomainTable, ProjectID))
+		} else {
+			query, err = db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE projectid='%s' AND id='%s';", manager.DatabaseName, manager.DomainTable, ProjectID, decodeDomainID(containerID)))
+			fmt.Println(fmt.Sprintf("SELECT * FROM %s.%s WHERE projectid='%s' AND id='%s';", manager.DatabaseName, manager.DomainTable, ProjectID, decodeDomainID(containerID)))
+		}
+	}
+	if containerID == "" {
+		query, err = db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE projectid='%s';", manager.DatabaseName, manager.DomainTable, ProjectID))
+		fmt.Printf(fmt.Sprintf("SELECT * FROM %s.%s WHERE projectid='%s';", manager.DatabaseName, manager.DomainTable, ProjectID))
+	} else {
+		query, err = db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE projectid='%s' AND id='%s';", manager.DatabaseName, manager.DomainTable, ProjectID, decodeDomainID(containerID)))
+		fmt.Println(fmt.Sprintf("SELECT * FROM %s.%s WHERE projectid='%s' AND id='%s';", manager.DatabaseName, manager.DomainTable, ProjectID, decodeDomainID(containerID)))
+	}
+
 	if err != nil {
 		log.Errorf("Error inserting the record: %v", err)
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error inserting the record: %v", err))
@@ -118,11 +144,13 @@ func CreateDomain(w http.ResponseWriter, r *http.Request) {
 
 	var jsonInput = DomainRequest{}
 	input, err := ioutil.ReadAll(r.Body)
+
 	if err != nil {
 		log.Errorf("Error reading request Body :%v", err)
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error reading request Body , err: %v", err))
 		return
 	}
+
 	err = json.Unmarshal(input, &jsonInput)
 	if err != nil {
 		log.Errorf("Error unmarshalling json request body: %v", err)
@@ -130,45 +158,51 @@ func CreateDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accountID, err := getAccountID(r)
 	if err != nil {
 		log.Errorf("Error get the account ID, please check the rancher server URL: %v", err)
 		ReturnHTTPError(w, r, "InternalServerError", http.StatusInternalServerError, fmt.Sprintf("Error get the account ID, please check the rancher server URL: %v", err))
 		return
 	}
 
-	db, err := sql.Open("mysql", "newuser:mynewpassword@tcp(54.255.182.226:3306)/?charset=utf8")
+	db, err := sql.Open("mysql", manager.ConnectionString)
 	if err != nil {
 		log.Errorf("Error connecting to database: %v", err)
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error connecting to database: %v", err))
 		return
 	}
-	_, err = db.Query(fmt.Sprintf("INSERT INTO `%s`.`%s` (`accountid`, `projectid`, `state`, `hashvalue`, `domain_name`) VALUES ('%s', '%s', '%s', '%s', '%s');", manager.DatabaseName, manager.DomainTable, accountID, jsonInput.ProjectID, "Pending", randToken(), jsonInput.DomanName))
-	fmt.Printf("INSERT INTO `%s`.`%s` (`accountid`, `projectid`, `state`, `hashvalue`, `domain_name`) VALUES ('%s', '%s', '%s', '%s', '%s');", manager.DatabaseName, manager.DomainTable, accountID, jsonInput.ProjectID, "Pending", randToken(), jsonInput.DomanName)
+
+	var query sql.Result
+
+	stmt, err := db.Prepare(fmt.Sprintf("INSERT INTO `%s`.`%s` (`accountid`, `projectid`, `state`, `hashvalue`, `domain_name`) VALUES ( ? , ? , ? , ? , ? );", manager.DatabaseName, manager.DomainTable))
+	query, err = stmt.Exec(jsonInput.AccountID, jsonInput.ProjectID, "Pending", randToken(), jsonInput.DomanName)
 	if err != nil {
-		log.Errorf("Error inserting the record: %v", err)
-		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error inserting the record: %v", err))
+		log.Errorf("Error delete the record: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error delete the record: %v", err))
+		return
+	}
+
+	lines, err := query.RowsAffected()
+	fmt.Println(lines)
+	if err != nil || lines == int64(0) {
+		log.Errorf("Error delete the record: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error delete the record: %v", err))
 		return
 	}
 
 	ReturnHTTPSuccess(w, r, "Succeed", http.StatusOK, fmt.Sprintf("inserting the record succeed"))
 
-	// query, err := db.Query(fmt.Sprintf(
-
-	fmt.Println()
-	// fmt.Println(praseQueryResult(query))
-
 }
 
 //ActivateDomain is for activating the domain
 func ActivateDomain(w http.ResponseWriter, r *http.Request) {
-	db, err := sql.Open("mysql", "newuser:mynewpassword@tcp(54.255.182.226:3306)/?charset=utf8")
+
+	db, err := sql.Open("mysql", manager.ConnectionString)
 	if err != nil {
 		log.Errorf("Error connecting to database: %v", err)
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error connecting to database: %v", err))
 		return
 	}
-	accountfromtoken, err := getAccountID(r)
+	accountfromtoken, isadmin, err := getAccountID(r)
 	if err != nil {
 		log.Errorf("Error writing error response %v", err)
 		ReturnHTTPError(w, r, "InternalServerError", http.StatusInternalServerError, fmt.Sprintf("Error marshal the result to jsonstring: %v", err))
@@ -184,7 +218,7 @@ func ActivateDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	query, err := db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE id='%s';", manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID)))
-
+	fmt.Printf("SELECT * FROM %s.%s WHERE id='%s';", manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID))
 	if err != nil {
 		log.Errorf("Error querying the statement: %v", err)
 		ReturnHTTPError(w, r, "NotFound", 404, fmt.Sprintf("Error querying the statement %v", err))
@@ -202,65 +236,99 @@ func ActivateDomain(w http.ResponseWriter, r *http.Request) {
 	accountidfromdb := queryResult[0].AccountID
 	hashvaluefromdb := queryResult[0].Hashvalue
 
-	if accountfromtoken != accountidfromdb && accountidfromdb != "" {
+	if queryResult[0].State == "active" {
+		log.Errorf("Domian is active, please don't active again")
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Domian is active, please don't active again"))
+		return
+	}
+
+	if accountfromtoken != accountidfromdb && accountidfromdb != "" && !isadmin {
 		log.Errorf("token unauthorized ")
 		ReturnHTTPError(w, r, "Unauthorized", http.StatusInternalServerError, fmt.Sprintf("token unauthorized"))
 		return
 	}
+	fmt.Println(queryResult[0].DomianName)
+	if queryResult[0].DomianName == "" {
+		log.Errorf("Cannot get domain name ")
+		ReturnHTTPError(w, r, "Unauthorized", http.StatusInternalServerError, fmt.Sprintf("Cannot get domain name "))
+		return
+	}
+	domainnamefromdb := queryResult[0].DomianName
+	// test purpose
+	// domainnamefromdb = "fiduccia.me"
+	fmt.Println(domainnamefromdb)
+	txtRecordResult := "error"
 	//Get the txt DNS Record
-	txt, err := net.LookupTXT("_hna-challenge.fiduccia.me")
-
-	if len(txt[0]) >= 1 {
-		// fmt.Println("TXT record" + txt[0])
-		if txt[0] != hashvaluefromdb {
-			if accountfromtoken != hashvaluefromdb {
-				log.Errorf("DNS txt record not valid")
-				// ReturnHTTPError(w, r, "NotFound", http.StatusNotFound, fmt.Sprintf("DNS txt record not valid"))
-				//return
+	txt, err := net.LookupTXT(fmt.Sprintf("_hna-challenge.%s", domainnamefromdb))
+	if txt != nil {
+		if len(txt[0]) >= 1 {
+			fmt.Println("TXT record" + txt[0])
+			if txt[0] != hashvaluefromdb {
+				if accountfromtoken != hashvaluefromdb {
+					log.Errorf("DNS txt record not existed or invalid")
+					txtRecordResult = "error"
+				} else {
+					txtRecordResult = "TXT Record"
+				}
 			}
 		}
 	}
-
+	acmeResult := ""
 	//validate the acme challenge
 	requestURL := "http://" + queryResult[0].DomianName + "/.well-know/hna.txt"
 	req, err := http.NewRequest("GET", requestURL, nil)
 	if err != nil {
 		log.Errorf("Error get the acme challenge: %v", err)
-		ReturnHTTPError(w, r, "NotFound", 404, fmt.Sprintf("Error get the acme challenge %v", err))
-		return
+		acmeResult = "error"
 	}
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Errorf("Error get the acme challenge: %v", err)
-		ReturnHTTPError(w, r, "NotFound", 404, fmt.Sprintf("Error get the acme challenge %v", err))
-		return
+		acmeResult = "error"
 	}
 	bodyText, err := ioutil.ReadAll(resp.Body)
 
 	trimedbodytext := strings.Trim(string(bodyText), "\n")
 	if trimedbodytext != hashvaluefromdb {
 		log.Errorf("Error get the acme challenge not match")
-		ReturnHTTPError(w, r, "Unauthorized", 401, fmt.Sprintf("Error get the acme challenge"))
+		acmeResult = "error"
+	}
+
+	if acmeResult != "error" {
+		acmeResult = "webroot"
+	}
+	fmt.Println(txtRecordResult + "::" + acmeResult)
+	if txtRecordResult == "error" && acmeResult == "error" {
+		ReturnHTTPError(w, r, "NotFound", http.StatusNotFound, fmt.Sprintf("Cannot validate domain name"))
 		return
 	}
 
-	_, err = db.Query(fmt.Sprintf("UPDATE `%s`.`%s` SET `%s`.`%s`.`state` = 'active' WHERE (`id`='%s') LIMIT 1;", manager.DatabaseName, manager.DomainTable, manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID)))
-
+	stmt, err := db.Prepare(fmt.Sprintf("UPDATE `%s`.`%s` SET `%s`.`%s`.`state` = 'active' WHERE (`id`= ? ) LIMIT 1;", manager.DatabaseName, manager.DomainTable, manager.DatabaseName, manager.DomainTable))
+	query2, err := stmt.Exec(decodeDomainID(containerID))
+	// fmt.Println(stmt)
 	if err != nil {
-		log.Errorf("Error updating the statement: %v", err)
-		ReturnHTTPError(w, r, "NotFound", 404, fmt.Sprintf("Error updating the statement %v", err))
+		log.Errorf("Error delete the record: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error delete the record: %v", err))
 		return
 	}
 
-	ReturnHTTPSuccess(w, r, "Succeed", http.StatusOK, fmt.Sprintf("update the record succeed"))
+	lines, err := query2.RowsAffected()
+	fmt.Println(lines)
+	if err != nil || lines == int64(0) {
+		log.Errorf("Cannot update the record: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Cannot update the record: %v", err))
+		return
+	}
+
+	ReturnHTTPSuccess(w, r, "Succeed", http.StatusOK, "Domian is valid")
 
 }
 
 //DeleteDomain is for DeleteDomain
 func DeleteDomain(w http.ResponseWriter, r *http.Request) {
 
-	accountID, err := getAccountID(r)
+	_, isadmin, err := getAccountID(r)
 	if err != nil {
 		log.Errorf("Error get the account ID, please check the rancher server URL: %v", err)
 		ReturnHTTPError(w, r, "InternalServerError", http.StatusInternalServerError, fmt.Sprintf("Error get the account ID, please check the rancher server URL: %v", err))
@@ -269,19 +337,49 @@ func DeleteDomain(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	containerID := vars["id"]
 
-	db, err := sql.Open("mysql", "newuser:mynewpassword@tcp(54.255.182.226:3306)/?charset=utf8")
+	projectid := r.Header.Get("X-API-ProjectID-Id")
+	if projectid == "" {
+		log.Errorf("Error reading request Body , err: no X-API-ProjectID-Id ")
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error reading request Body , err: X-API-ProjectID-Id"))
+		return
+	}
+
+	db, err := sql.Open("mysql", manager.ConnectionString)
 	if err != nil {
 		log.Errorf("Error connecting to database: %v", err)
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error connecting to database: %v", err))
 		return
 	}
-	_, err = db.Query(fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE `id`='%s' and `accountid`='%s' ;", manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID), accountID))
-	fmt.Printf("DELETE FROM `%s`.`%s` WHERE `id`='%s' and `accountid`='%s' ;", manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID), accountID)
-	if err != nil {
+	var query sql.Result
+
+	if isadmin {
+		stmt, err := db.Prepare(fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE `id`=? ;", manager.DatabaseName, manager.DomainTable))
+		query, err = stmt.Exec(decodeDomainID(containerID))
+		if err != nil {
+			log.Errorf("Error delete the record: %v", err)
+			ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error delete the record: %v", err))
+			return
+		}
+	} else {
+
+		stmt, err := db.Prepare(fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE `id`=? and `projectid`=?;", manager.DatabaseName, manager.DomainTable))
+		query, err = stmt.Exec(decodeDomainID(containerID), projectid)
+		if err != nil {
+			log.Errorf("Error delete the record: %v", err)
+			ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error delete the record: %v", err))
+			return
+		}
+
+	}
+
+	lines, err := query.RowsAffected()
+	fmt.Println(lines)
+	if err != nil || lines == int64(0) {
 		log.Errorf("Error delete the record: %v", err)
-		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error inserting the record: %v", err))
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("None record deleted"))
 		return
 	}
+
 	ReturnHTTPSuccess(w, r, "Succeed", http.StatusOK, fmt.Sprintf("Delete the record succeed"))
 	db.Close()
 }
@@ -312,14 +410,14 @@ func ValidateDomian(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accountID, err := getAccountID(r)
+	accountID, _, err := getAccountID(r)
 	if err != nil {
 		log.Errorf("Error get the account ID, please check the rancher server URL: %v", err)
 		ReturnHTTPError(w, r, "InternalServerError", http.StatusInternalServerError, fmt.Sprintf("Error get the account ID, please check the rancher server URL: %v", err))
 		return
 	}
 
-	db, err := sql.Open("mysql", "newuser:mynewpassword@tcp(54.255.182.226:3306)/?charset=utf8")
+	db, err := sql.Open("mysql", manager.ConnectionString)
 	if err != nil {
 		log.Errorf("Error connecting to database: %v", err)
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error connecting to database: %v", err))
@@ -334,13 +432,12 @@ func ValidateDomian(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// fmt.Println(jsonInput.LbConfig.PortRules[0].Hostname)
-
 	queryResult, err := praseQueryResult(query)
 	validDomainlist := mapset.NewSet()
 	fmt.Print(queryResult)
 	//there are some problem we cannot get the database
 	fmt.Println("extract domain name from db")
+
 	for k, _ := range queryResult {
 		if queryResult[k].DomianName != "" {
 			fmt.Println(queryResult[k].DomianName)
@@ -371,7 +468,6 @@ func ValidateDomian(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{}
 	requestURL := fmt.Sprintf("%s/v2-beta/projects/%s/loadbalancerservice", manager.URL, ProjectID)
 	req, err := http.NewRequest("GET", requestURL, nil)
-	// postCookie := http.Cookie{Name: "token", cookie.Value}
 	postcookie := http.Cookie{Name: "token", Value: cookie.Value}
 	req.AddCookie(&postcookie)
 	req.Header.Add("x-api-csrf", csrf)
@@ -392,38 +488,35 @@ func checkErr(errMasg error) {
 	}
 }
 
-func getAccountID(r *http.Request) (string, error) {
+func getAccountID(r *http.Request) (string, bool, error) {
 
 	//get accountid from token
 	cookie, err := r.Cookie("token")
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	log.Infof("token:" + cookie.Value)
 	accountIDData := getValue(manager.URL, "accounts", cookie.Value)
 	if len(accountIDData) == 1 {
 		if accountIDData[0] != "ID_NOT_FIND" && accountIDData[0] != "Unauthorized" {
-			return accountIDData[0], nil
+			return accountIDData[0], false, nil
 		}
 		err = errors.New("Cannot extract account id")
-		return "", err
+		return "", false, err
+
+	}
+	if len(accountIDData) == 2 {
+		if accountIDData[1] == "admin" {
+			return accountIDData[0], true, nil
+		}
+		err = errors.New("Cannot extract account id")
+		return "", false, err
 
 	}
 	err = errors.New("Cannot extract account id")
-	return "", err
+	return "", false, err
 
 }
-
-// func praseStruct(queryResult map[int]map[string]string) map[string]string {
-// 	var result = make(map[string]string)
-// 	for _, v := range queryResult {
-// 		for key, value := range v {
-// 			result[key] = value
-
-// 		}
-// 	}
-// 	return result
-// }
 
 //ReturnHTTPError handles sending out CatalogError response
 func ReturnHTTPError(w http.ResponseWriter, r *http.Request, status string, httpStatus int, errorMessage string) {
@@ -466,19 +559,19 @@ func ReturnHTTPSuccess(w http.ResponseWriter, r *http.Request, status string, ht
 }
 
 func praseQueryResult(query *sql.Rows) ([]DomainList, error) {
-	column, _ := query.Columns()              //读出查询出的列字段名
-	values := make([][]byte, len(column))     //values是每个列的值，这里获取到byte里
-	scans := make([]interface{}, len(column)) //因为每次查询出来的列是不定长的，用len(column)定住当次查询的长度
-	for i := range values {                   //让每一行数据都填充到[][]byte里面
+	column, _ := query.Columns()
+	values := make([][]byte, len(column))
+	scans := make([]interface{}, len(column))
+	for i := range values {
 		scans[i] = &values[i]
 	}
-	results := []DomainList{} // 最后得到的map
-	for query.Next() {        //循环，让游标往下移动
-		if err := query.Scan(scans...); err != nil { //query.Scan查询出来的不定长值放到scans[i] = &values[i],也就是每行都放在values里
+	results := []DomainList{}
+	for query.Next() {
+		if err := query.Scan(scans...); err != nil {
 			return nil, err
 		}
-		row := DomainList{}        //每行数据
-		for k, v := range values { //每行数据是放在values里面，现在把它挪到row里
+		row := DomainList{}
+		for k, v := range values {
 			switch column[k] {
 			case "domainid":
 				row.DomainID = string(v)
@@ -492,11 +585,13 @@ func praseQueryResult(query *sql.Rows) ([]DomainList, error) {
 				row.Hashvalue = string(v)
 			case "state":
 				row.State = string(v)
+			case "id":
+				row.ContainerID = encodeDomainID(string(v))
 			default:
 
 			}
 		}
-		results = append(results, row) //装入结果集中
+		results = append(results, row)
 
 	}
 
@@ -549,7 +644,7 @@ func getValue(host string, path string, token string) []string {
 					result = append(result, id)
 					//if the token belongs to admin, only return the admin token
 					if name == "admin" && path == "accounts" {
-						result = []string{id}
+						result = []string{id, "admin"}
 						break
 					}
 				} else {
