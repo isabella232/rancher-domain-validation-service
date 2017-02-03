@@ -26,7 +26,7 @@ var DatabaseURL = "54.255.182.226:3306"
 var DatabaseUsername = "newuser"
 
 //DatbasePWD is the sqlserver password
-var DatbasePWD = "mynewpassword"
+var DatbasePWD = "newuser"
 
 //ConnectionString for connecting the sql server
 var ConnectionString = "newuser:mynewpassword@tcp(54.255.182.226:3306)/?charset=utf8"

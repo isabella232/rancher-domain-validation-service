@@ -49,7 +49,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:   "DatbasePWD",
-			Value:  "mynewpassword",
+			Value:  "newuser",
 			Usage:  "Local server port ",
 			EnvVar: "MYSQL_DATABASE_PWD",
 		},

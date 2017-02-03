@@ -176,21 +176,21 @@ func CreateDomain(w http.ResponseWriter, r *http.Request) {
 	stmt, err := db.Prepare(fmt.Sprintf("INSERT INTO `%s`.`%s` (`accountid`, `projectid`, `state`, `hashvalue`, `domain_name`) VALUES ( ? , ? , ? , ? , ? );", manager.DatabaseName, manager.DomainTable))
 	query, err = stmt.Exec(jsonInput.AccountID, jsonInput.ProjectID, "Pending", randToken(), jsonInput.DomanName)
 	if err != nil {
-		log.Errorf("Error delete the record: %v", err)
-		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error delete the record: %v", err))
+		log.Errorf("Error inserting the record: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error inserting the record: %v", err))
 		return
 	}
 
 	lines, err := query.RowsAffected()
 	fmt.Println(lines)
 	if err != nil || lines == int64(0) {
-		log.Errorf("Error delete the record: %v", err)
-		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error delete the record: %v", err))
+		log.Errorf("Error inserting the record: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error inserting the record: %v", err))
 		return
 	}
 
 	ReturnHTTPSuccess(w, r, "Succeed", http.StatusOK, fmt.Sprintf("inserting the record succeed"))
-
+	db.Close()
 }
 
 //ActivateDomain is for activating the domain
@@ -217,14 +217,20 @@ func ActivateDomain(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	query, err := db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE id='%s';", manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID)))
-	fmt.Printf("SELECT * FROM %s.%s WHERE id='%s';", manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID))
+	query, err := db.Query(fmt.Sprintf("SELECT * FROM %s.%s WHERE id='%s' ;", manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID)))
+	// fmt.Printf("SELECT * FROM %s.%s WHERE id='%s' ;", manager.DatabaseName, manager.DomainTable, decodeDomainID(containerID))
 	if err != nil {
 		log.Errorf("Error querying the statement: %v", err)
 		ReturnHTTPError(w, r, "NotFound", 404, fmt.Sprintf("Error querying the statement %v", err))
 		return
 	}
 	queryResult, err := praseQueryResult(query)
+
+	if err != nil {
+		log.Errorf("Prase SQL result error: %v", err)
+		ReturnHTTPError(w, r, "NotFound", 404, fmt.Sprintf("Prase SQL result error: %v", err))
+		return
+	}
 
 	if len(queryResult) != 1 {
 		log.Errorf("Domain not find")
@@ -247,7 +253,7 @@ func ActivateDomain(w http.ResponseWriter, r *http.Request) {
 		ReturnHTTPError(w, r, "Unauthorized", http.StatusInternalServerError, fmt.Sprintf("token unauthorized"))
 		return
 	}
-	fmt.Println(queryResult[0].DomianName)
+	// fmt.Println(queryResult[0].DomianName)
 	if queryResult[0].DomianName == "" {
 		log.Errorf("Cannot get domain name ")
 		ReturnHTTPError(w, r, "Unauthorized", http.StatusInternalServerError, fmt.Sprintf("Cannot get domain name "))
@@ -255,21 +261,28 @@ func ActivateDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	domainnamefromdb := queryResult[0].DomianName
 	// test purpose
-	// domainnamefromdb = "fiduccia.me"
-	fmt.Println(domainnamefromdb)
+	domainnamefromdb = "fiduccia.me"
+	// fmt.Println(domainnamefromdb)
 	txtRecordResult := "error"
 	//Get the txt DNS Record
 	txt, err := net.LookupTXT(fmt.Sprintf("_hna-challenge.%s", domainnamefromdb))
+	if err != nil {
+		log.Errorf("Cannot get the txt record from server  %v", domainnamefromdb)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Cannot get the txt record from server  %v", domainnamefromdb))
+		return
+	}
 	if txt != nil {
 		if len(txt[0]) >= 1 {
-			fmt.Println("TXT record" + txt[0])
+			// fmt.Println("TXT record     :" + txt[0])
+			fmt.Println("hashvaluefromdb:" + hashvaluefromdb)
 			if txt[0] != hashvaluefromdb {
 				if accountfromtoken != hashvaluefromdb {
 					log.Errorf("DNS txt record not existed or invalid")
 					txtRecordResult = "error"
-				} else {
-					txtRecordResult = "TXT Record"
 				}
+			} else {
+				txtRecordResult = "TXT Record"
+				// fmt.Println("hashvaluefromdb success")
 			}
 		}
 	}
@@ -303,18 +316,44 @@ func ActivateDomain(w http.ResponseWriter, r *http.Request) {
 		ReturnHTTPError(w, r, "NotFound", http.StatusNotFound, fmt.Sprintf("Cannot validate domain name"))
 		return
 	}
+	// fmt.Println(queryResult[0])
+	//update the domain state to inactive if the domain name have already activated.
+	inactiveStmt, err := db.Prepare(fmt.Sprintf("UPDATE `%s`.`%s` SET `%s`.`%s`.`state` = 'inactive' WHERE ( `domain_name` = '%s' AND `id` <> %s AND `state` = 'active' ) ;", manager.DatabaseName, manager.DomainTable, manager.DatabaseName, manager.DomainTable, queryResult[0].DomianName, decodeDomainID(containerID)))
+	// fmt.Printf(fmt.Sprintf("UPDATE `%s`.`%s` SET `%s`.`%s`.`state` = 'inactive' WHERE ( `domain_name` = '%s' AND `id` <> %s AND `state` = 'active' ) ;", manager.DatabaseName, manager.DomainTable, manager.DatabaseName, manager.DomainTable, queryResult[0].DomianName, decodeDomainID(containerID)))
 
-	stmt, err := db.Prepare(fmt.Sprintf("UPDATE `%s`.`%s` SET `%s`.`%s`.`state` = 'active' WHERE (`id`= ? ) LIMIT 1;", manager.DatabaseName, manager.DomainTable, manager.DatabaseName, manager.DomainTable))
+	if err != nil {
+		log.Errorf("Error update the record to inactive: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error update the record to inactive: %v", err))
+		return
+	}
+	inactiveQuery, err := inactiveStmt.Exec()
+	// fmt.Println(inactiveStmt)
+	if err != nil {
+		log.Errorf("Error updating the record: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error update the record to inactive: %v", err))
+		return
+	}
+
+	inactiveLines, err := inactiveQuery.RowsAffected()
+	fmt.Printf("Update %d to inacitve. ", inactiveLines)
+
+	//update the valid domain state to active
+	stmt, err := db.Prepare(fmt.Sprintf("UPDATE `%s`.`%s` SET `%s`.`%s`.`state` = 'active' WHERE (`id` = ? ) LIMIT 1;", manager.DatabaseName, manager.DomainTable, manager.DatabaseName, manager.DomainTable))
+	if err != nil {
+		log.Errorf("Error update the record to active: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error update the record to active: %v", err))
+		return
+	}
 	query2, err := stmt.Exec(decodeDomainID(containerID))
 	// fmt.Println(stmt)
 	if err != nil {
-		log.Errorf("Error delete the record: %v", err)
-		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error delete the record: %v", err))
+		log.Errorf("Error update the record to active: %v", err)
+		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Error update the record to active: %v", err))
 		return
 	}
 
 	lines, err := query2.RowsAffected()
-	fmt.Println(lines)
+	fmt.Printf("Update %d to acitve. ", lines)
 	if err != nil || lines == int64(0) {
 		log.Errorf("Cannot update the record: %v", err)
 		ReturnHTTPError(w, r, "BadRequest", http.StatusBadRequest, fmt.Sprintf("Cannot update the record: %v", err))
@@ -322,7 +361,7 @@ func ActivateDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ReturnHTTPSuccess(w, r, "Succeed", http.StatusOK, "Domian is valid")
-
+	db.Close()
 }
 
 //DeleteDomain is for DeleteDomain
@@ -479,7 +518,7 @@ func ValidateDomian(w http.ResponseWriter, r *http.Request) {
 	}
 	bodyText, err := ioutil.ReadAll(resp.Body)
 	w.Write(bodyText)
-
+	db.Close()
 }
 
 func checkErr(errMasg error) {
@@ -663,7 +702,7 @@ func getValue(host string, path string, token string) []string {
 func randToken() string {
 	b := make([]byte, 40)
 	rand.Read(b)
-	return fmt.Sprintf("%x", b)
+	return fmt.Sprintf("%x", b)[:39]
 }
 
 //convert the cattle format to the domain id in database
