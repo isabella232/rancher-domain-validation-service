@@ -50,29 +50,31 @@ limitations under the License.
 		- `cp db.local db.zp.com`
 		- `vim db.zp.com`
 		
-```
-;
-; BIND data file for local loopback interface
-;
-$TTL	604800
-@	IN	SOA	localhost. root.localhost. (
-			      2		; Serial
-			 604800		; Refresh
-			  86400		; Retry
-			2419200		; Expire
-			 604800 )	; Negative Cache TTL
-;
-@	IN	NS	localhost.
-@	IN	A	127.0.0.1
-@	IN	AAAA	::1
-test       IN      A        54.169.69.238
-www IN      A               54.169.69.238
-@            IN      A      54.169.69.238
-_hna-challenge    IN   TXT  "4501163876f8a13521f9233cb3d0464f36e61bbc8965d"
-
-```
-
-
+		```
+		;
+		; BIND data file for local loopback interface
+		;
+		$TTL	604800
+		@	IN	SOA	localhost. root.localhost. (
+					      2		; Serial
+					 604800		; Refresh
+					  86400		; Retry
+					2419200		; Expire
+					 604800 )	; Negative Cache TTL
+		;
+		@	IN	NS	localhost.
+		@	IN	A	127.0.0.1
+		@	IN	AAAA	::1
+		test       IN      A        54.169.69.238
+		www IN      A               54.169.69.238
+		@            IN      A      54.169.69.238
+		_hna-challenge    IN   TXT  "4501163876f8a13521f9233cb3d0464f36e61bbc8965d"
+		
+		```
+	4.  restart bind server
+	
+		`# /etc/init.d/bind9 restart`
+		`[ ok ] Restarting bind9 (via systemctl): bind9.service.`
 	
 - Client side:
 
@@ -85,10 +87,20 @@ _hna-challenge    IN   TXT  "4501163876f8a13521f9233cb3d0464f36e61bbc8965d"
 
 	sudo vi /etc/resolvconf/resolv.conf.d/head
 	search nyc3.example.com  # your private domain
-nameserver 10.128.10.11  # ns1 private IP address
-nameserver 10.128.20.12  # ns2 private IP address
+    nameserver 10.128.10.11  # ns1 private IP address
+    nameserver 10.128.20.12  # ns2 private IP address
 
-sudo resolvconf -u
+    sudo resolvconf -u
+```
+###Add user to mysql database
+```
+ insert into mysql.user(Host,User,Password) values("localhost","newuser",password("mynewpassword"));
+ 
+ update user set password=PASSWORD("mynewpassword") where User=‘newsier’;
+ 
+ grant all privileges  on *.* to newuser@'%' identified by "newuser";
+ 
+ flush privileges;
 ```
 
 ###Web server setup

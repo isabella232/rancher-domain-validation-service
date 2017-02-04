@@ -261,7 +261,7 @@ func ActivateDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	domainnamefromdb := queryResult[0].DomianName
 	// test purpose
-	domainnamefromdb = "fiduccia.me"
+	// domainnamefromdb = "fiduccia.me"
 	// fmt.Println(domainnamefromdb)
 	txtRecordResult := "error"
 	//Get the txt DNS Record
