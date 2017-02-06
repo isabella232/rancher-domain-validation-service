@@ -7,8 +7,8 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/rancher/rancher-domain-validaiton-service/manager"
-	"github.com/rancher/rancher-domain-validaiton-service/service"
+	"github.com/rancher/rancher-domain-validation-service/manager"
+	"github.com/rancher/rancher-domain-validation-service/service"
 	"github.com/urfave/cli"
 )
 

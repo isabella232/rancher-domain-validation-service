@@ -16,8 +16,8 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/deckarep/golang-set"
 	"github.com/gorilla/mux"
-	"github.com/rancher/rancher-domain-validaiton-service/manager"
-	"github.com/rancher/rancher-domain-validaiton-service/model"
+	"github.com/rancher/rancher-domain-validation-service/manager"
+	"github.com/rancher/rancher-domain-validation-service/model"
 )
 
 var db *sql.DB
@@ -477,7 +477,7 @@ func ValidateDomian(w http.ResponseWriter, r *http.Request) {
 	//there are some problem we cannot get the database
 	fmt.Println("extract domain name from db")
 
-	for k, _ := range queryResult {
+	for k := range queryResult {
 		if queryResult[k].DomianName != "" {
 			fmt.Println(queryResult[k].DomianName)
 			validDomainlist.Add(queryResult[k].DomianName)
